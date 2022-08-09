@@ -37,8 +37,15 @@ void papi_exp_init_lib() {
 	}
 }
 
+void exp_start_timer(int tid) {
+	timer_values[tid] -= duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+}
+
+void exp_stop_timer(int tid) {
+	timer_values[tid] += duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+}
+
 int papi_exp_start_counter(int tid) {
-		timer_values[tid] = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
         if(PAPI_thread_init(pthread_self) != PAPI_OK) {
 			printf("PAPI_thread_init fail\n");
 			exit(1);
@@ -84,8 +91,6 @@ void papi_exp_stop_counter(int tid, int papi_event) {
 		}
 		for(int i=0; i<PAPI_MEASUREMENTS; i++)
 			papi_values[tid][i] = papi_values_1[i] - papi_values[tid][i];
-		int64_t tmp = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
-		timer_values[tid] = tmp - timer_values[tid];
 }
 
 void papi_exp_print_counters(int opsNum, int threadNum) {
@@ -93,11 +98,11 @@ void papi_exp_print_counters(int opsNum, int threadNum) {
 	double throughput = 0.0;
 	for(int i = 0; i < MAX_CPU; i++) {
 		if(timer_values[i] > 0) 
-			throughput += (double)opsNum / (double)threadNum / (double)(timer_values[i])/ 1000;
+			throughput += (double)(timer_values[i]);
 		for(int j = 0; j < PAPI_MEASUREMENTS; j++)
 			print_values[j] += papi_values[i][j];
 	}
-	// throughput = (double)opsNum / throughput * (double)threadNum / 1000;
+	throughput = (double)opsNum / throughput * (double)threadNum / 1000;
 	cout << "PAPI_L3_TCM:  " << ((double)print_values[0] / opsNum) << endl;
 	cout << "PAPI_REF_CYC: " << ((double)print_values[1] / opsNum) << endl;
 	cout << "PAPI_TOT_INS: " << ((double)print_values[2] / opsNum) << endl;

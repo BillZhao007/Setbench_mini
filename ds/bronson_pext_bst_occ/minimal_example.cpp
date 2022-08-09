@@ -32,6 +32,10 @@ bool errors[threadNum] = {false};
 double skewness;
 #define PIM_NR 2560
 
+#define BATCH_NUM 100
+rand_distribution uni_dist;
+rand_distribution zipf_dist[BATCH_NUM];
+
 // #define DATA_STRUCTURE_ADAPTER ds_adapter<int64_t, void*>
 
 template<class DATA_STRUCTURE_ADAPTER>
@@ -58,10 +62,8 @@ void* init_per_thread(void *ptr) {
     void *value = NULL;
 
     if(ops == NULL) {
-        rand_distribution uni_dist;
-        rand_uniform_init(&uni_dist, INT64_MAX);
         for(int i = 0; i < n; i++) {
-            key = rand_dist(&uni_dist);
+            key = rand_dist(&uni_dist, tid);
             tree->insert(tid, key, value);
         }
     }
@@ -89,11 +91,16 @@ bool run_init_threads(const int tnum, DATA_STRUCTURE_ADAPTER *tree, ops_array in
     init_wrapper<DATA_STRUCTURE_ADAPTER> input_wrappers[tnum];
     
     int result;
+
+    if(ops == NULL) rand_uniform_init(&uni_dist, INT64_MAX);
+
     for(int i=0; i<tnum; i++) {
         input_wrappers[i].tid = i;
         input_wrappers[i].tree = tree;
-        if(ops == NULL)
+        if(ops == NULL) {
+            seed_and_print(i);
             input_wrappers[i].ops = NULL;
+        }
         else
             input_wrappers[i].ops = &(ops[n_per_thread * i]);
         input_wrappers[i].n = n_per_thread;
@@ -131,18 +138,21 @@ void* search_per_thread(void *ptr) {
     tree->initThread(tid);
 
     if(ops == NULL) {
-        bool result;
-        rand_distribution zipf_dist;
-        rand_pim_init(&zipf_dist, PIM_NR, skewness, INT64_MAX);
+        int bbb;
         for(int i = 0; i < n; i++) {
-            key = rand_dist(&zipf_dist);
-            result = tree->contains(tid, key);
+            bbb = i * BATCH_NUM / n;
+            key = rand_dist(&(zipf_dist[bbb]), tid);
+            exp_start_timer(tid);
+            tree->find(tid, key);
+            exp_stop_timer(tid);
         }
     }
     else {
         for(int i = 0; i < n; i++) {
             key = ops[i].tsk.p.key;
+            exp_start_timer(tid);
             tree->find(tid, key);
+            exp_stop_timer(tid);
         }
     }
 
@@ -171,18 +181,21 @@ void* insert_per_thread(void *ptr) {
     tree->initThread(tid);
 
     if(ops == NULL) {
-        rand_distribution zipf_dist;
-        rand_pim_init(&zipf_dist, PIM_NR, skewness, INT64_MAX);
+        int bbb;
         for(int i = 0; i < n; i++) {
-            key = rand_dist(&zipf_dist);
-            tree->insert(tid, key, value);
+            bbb = i * BATCH_NUM / n;
+            key = rand_dist(&(zipf_dist[bbb]), tid);
+            exp_start_timer(tid);
+            tree->insertIfAbsent(tid, key, value);
+            exp_stop_timer(tid);
         }
     }
     else {
         for(int i = 0; i < n; i++) {
             key = ops[i].tsk.i.key;
-            // value = ops[i].tsk.i.value;
-            tree->insert(tid, key, value);
+            exp_start_timer(tid);
+            tree->insertIfAbsent(tid, key, value);
+            exp_stop_timer(tid);
         }
     }
 
@@ -205,11 +218,18 @@ bool run_test_threads(const int tnum, DATA_STRUCTURE_ADAPTER *tree, ops_array te
     
     int result;
 
+    if(ops == NULL) {
+        for(int i = 0; i < BATCH_NUM; i++)
+            rand_pim_init(&(zipf_dist[i]), PIM_NR, skewness, INT64_MAX);
+    }
+
     for(int i=0; i<tnum; i++) {
         input_wrappers[i].tid = i;
         input_wrappers[i].tree = tree;
-        if(ops == NULL)
+        if(ops == NULL) {
             input_wrappers[i].ops = NULL;
+            seed_and_print(i);
+        }
         else
             input_wrappers[i].ops = &(ops[n_per_thread * i]);
         input_wrappers[i].n = n_per_thread;
@@ -245,7 +265,7 @@ int main(int argc, char** argv) {
 
     auto tree = new ds_adapter<int64_t, void*>(threadNum, KEY_NEG_INFTY, unused1, unused2, unused3);
 
-    seed_and_print();
+    seed_and_print(0);
 
     // ops_array init_ops = {.n = 400, .operation_map = NULL};
     // ops_array search_ops = {.n = 400, .operation_map = NULL};
