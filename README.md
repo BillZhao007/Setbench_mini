@@ -1,6 +1,6 @@
 # SetBench Mini
 
-Mini example used for temporary experiments in research.
+Mini example used for temporary experiments on state-of-art concurrent indexes.
 
 Refer to Trevor Brown's SetBench: https://bitbucket.org/trbot86/setbench/src/master/
 
