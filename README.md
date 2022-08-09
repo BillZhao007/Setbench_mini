@@ -1,4 +1,7 @@
-# Mini example used for temporary experiments in research.
+# SetBench Mini
+
+Mini example used for temporary experiments in research.
+
 Refer to Trevor Brown's SetBench: https://bitbucket.org/trbot86/setbench/src/master/
 
 ### To support PAPI measurements in usage:
