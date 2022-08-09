@@ -37,8 +37,15 @@ void papi_exp_init_lib() {
 	}
 }
 
+void exp_start_timer(int tid) {
+	timer_values[tid] -= duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+}
+
+void exp_stop_timer(int tid) {
+	timer_values[tid] += duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+}
+
 int papi_exp_start_counter(int tid) {
-		timer_values[tid] = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
         if(PAPI_thread_init(pthread_self) != PAPI_OK) {
 			printf("PAPI_thread_init fail\n");
 			exit(1);
@@ -84,8 +91,6 @@ void papi_exp_stop_counter(int tid, int papi_event) {
 		}
 		for(int i=0; i<PAPI_MEASUREMENTS; i++)
 			papi_values[tid][i] = papi_values_1[i] - papi_values[tid][i];
-		int64_t tmp = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
-		timer_values[tid] = tmp - timer_values[tid];
 }
 
 void papi_exp_print_counters(int opsNum, int threadNum) {
