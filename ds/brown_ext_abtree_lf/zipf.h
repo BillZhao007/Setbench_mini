@@ -29,15 +29,16 @@
 
 #define DIST_PIM 3
 
-uint64_t rand_state;
+#define MAX_CPU_RAND 64
+uint64_t rand_state[MAX_CPU_RAND] = {0};
 
-static void rand_seed(uint64_t s) {
-	rand_state = s;
+static void rand_seed(uint64_t s, int tid) {
+	rand_state[tid] = s;
 }
 
-static uint32_t rand_dword() {
-	rand_state = 6364136223846793005 * rand_state + 1;
-	return rand_state >> 32;
+static uint32_t rand_dword(int tid) {
+	rand_state[tid] = 6364136223846793005 * rand_state[tid] + 1;
+	return rand_state[tid] >> 32;
 }
 
 static uint32_t rand_dword_r(uint64_t* state) {
@@ -45,27 +46,27 @@ static uint32_t rand_dword_r(uint64_t* state) {
 	return (*state) >> 32;
 }
 
-static uint64_t rand_uint64() {
-	return (((uint64_t)rand_dword()) << 32) + rand_dword();
+static uint64_t rand_uint64(int tid) {
+	return (((uint64_t)rand_dword(tid)) << 32) + rand_dword(tid);
 }
 
-static float rand_float() {
-	return ((float)rand_dword()) / UINT32_MAX;
+static float rand_float(int tid) {
+	return ((float)rand_dword(tid)) / UINT32_MAX;
 }
 
-static void random_bytes(uint8_t* buf, int count) {
+static void random_bytes(uint8_t* buf, int count, int tid) {
 	int i;
 	for (i = 0;i < count;i++)
-		buf[i] = rand_dword() % 256;
+		buf[i] = rand_dword(tid) % 256;
 }
 
-static long int seed_and_print() {
+static long int seed_and_print(int tid) {
 	struct timeval now;
 	long int seed;
 	gettimeofday(&now, NULL);
-	seed = now.tv_sec * 1000000 + now.tv_usec;
+	seed = now.tv_sec * 1000000 + now.tv_usec + tid * 10000;
 	// printf("Using seed %ld\n", seed);
-	rand_seed(seed);
+	rand_seed(seed, tid);
 	return seed;
 }
 
@@ -93,8 +94,8 @@ rand_distribution zipf_dist_cache;
 
 #define ZIPF_ERROR_RATIO 1.01
 
-double rand_double() {
-	return ((double)rand_uint64()) / UINT64_MAX;
+double rand_double(int tid) {
+	return ((double)rand_uint64(tid)) / UINT64_MAX;
 }
 
 void rand_uniform_init(rand_distribution* dist, uint64_t max) {
@@ -157,7 +158,7 @@ void rand_pim_init(rand_distribution* dist, uint64_t max, double skew, uint64_t 
 	for(uint64_t i = 0; i < max; i++)
 		dist->pim_idx[i] = i;
 	for(uint64_t i = 0; i < max; i++) {
-		j = rand_uint64() % (max - i);
+		j = rand_uint64(0) % (max - i);
 		tmp = dist->pim_idx[i];
 		dist->pim_idx[i] = dist->pim_idx[j];
 		dist->pim_idx[j] = tmp;
@@ -173,15 +174,15 @@ uint64_t mix(uint64_t x) {
 	return x;
 }
 
-uint64_t rand_dist(rand_distribution* dist) {
+uint64_t rand_dist(rand_distribution* dist, int tid) {
 	uint64_t low, high;
 	uint64_t range_num;
 
 	if (dist->type == DIST_UNIFORM)
-		return rand_uint64() % dist->max;
+		return rand_uint64(tid) % dist->max;
 
 	// Generate Zipf-distributed random
-	double x = rand_double() * dist->total_weight;
+	double x = rand_double(tid) * dist->total_weight;
 
 	// Find which range contains x
 	low = 0;
@@ -201,7 +202,7 @@ uint64_t rand_dist(rand_distribution* dist) {
 
 	// This range contains x. Choose a random value in the range.
 	zipf_range* range = &(dist->zipf_ranges[range_num]);
-	uint64_t zipf_rand = (rand_uint64() % range->size) + range->start;
+	uint64_t zipf_rand = (rand_uint64(tid) % range->size) + range->start;
 
 	if (dist->type == DIST_ZIPF) {
 		// Permute the output. Otherwise, all common values will be near one another
@@ -214,7 +215,7 @@ uint64_t rand_dist(rand_distribution* dist) {
 	else if(dist->type == DIST_PIM) {
 		uint64_t rank_idx = mix(zipf_rand) % dist->max;
 		uint64_t rank_size = dist->pim_idx_max / dist->max;
-		uint64_t pim_rand_res = rank_size * rank_idx + (rand_uint64() % rank_size);
+		uint64_t pim_rand_res = rank_size * rank_idx + (rand_uint64(tid) % rank_size);
 		return pim_rand_res;
 	}
 }
