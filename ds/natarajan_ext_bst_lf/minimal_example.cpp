@@ -64,14 +64,14 @@ void* init_per_thread(void *ptr) {
     if(ops == NULL) {
         for(int i = 0; i < n; i++) {
             key = rand_dist(&uni_dist, tid);
-            tree->insert(tid, key, value);
+            tree->insertIfAbsent(tid, key, value);
         }
     }
     else {
         for(int i = 0; i < n; i++) {
             key = ops[i].tsk.i.key;
             // value = ops[i].tsk.i.value;
-            tree->insert(tid, key, value);
+            tree->insertIfAbsent(tid, key, value);
         }
     }
 
