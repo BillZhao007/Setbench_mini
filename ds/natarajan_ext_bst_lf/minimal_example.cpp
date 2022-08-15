@@ -256,6 +256,320 @@ bool run_test_threads(const int tnum, DATA_STRUCTURE_ADAPTER *tree, ops_array te
     return true;
 }
 
+
+
+
+
+
+
+template<class DATA_STRUCTURE_ADAPTER>
+struct i64_wrapper {
+    int tid;
+    DATA_STRUCTURE_ADAPTER *tree;
+    int n;
+    int64_t* ops;
+};
+
+template<class DATA_STRUCTURE_ADAPTER>
+void* init_per_thread_i64(void *ptr) {
+
+    i64_wrapper<DATA_STRUCTURE_ADAPTER> *input_wrapper = (i64_wrapper<DATA_STRUCTURE_ADAPTER>*) ptr;
+
+    int tid = input_wrapper->tid;
+    auto tree = input_wrapper->tree;
+    int n = input_wrapper->n;
+    int64_t* ops = input_wrapper->ops;
+
+    tree->initThread(tid);
+
+    int64_t key;
+    void *value = NULL;
+
+    if(ops == NULL) {
+        for(int i = 0; i < n; i++) {
+            key = rand_dist(&uni_dist, tid);
+            tree->insertIfAbsent(tid, key, value);
+        }
+    }
+    else {
+        for(int i = 0; i < n; i++) {
+            key = ops[i];
+            // value = ops[i].tsk.i.value;
+            tree->insertIfAbsent(tid, key, value);
+        }
+    }
+
+    tree->deinitThread(tid);
+
+    return NULL;
+}
+
+template<class DATA_STRUCTURE_ADAPTER>
+bool run_init_threads_i64(const int tnum, DATA_STRUCTURE_ADAPTER *tree, i64_array init_ops) {
+
+    int init_n = init_ops.n;
+    int64_t* ops =  init_ops.i64_map;
+    int n_per_thread = init_n / tnum;
+
+    pthread_t threads[tnum];
+    i64_wrapper<DATA_STRUCTURE_ADAPTER> input_wrappers[tnum];
+    
+    int result;
+
+    if(ops == NULL) rand_uniform_init(&uni_dist, INT64_MAX);
+
+    for(int i=0; i<tnum; i++) {
+        input_wrappers[i].tid = i;
+        input_wrappers[i].tree = tree;
+        if(ops == NULL) {
+            seed_and_print(i);
+            input_wrappers[i].ops = NULL;
+        }
+        else
+            input_wrappers[i].ops = &(ops[n_per_thread * i]);
+        input_wrappers[i].n = n_per_thread;
+
+        result = pthread_create(&(threads[i]), NULL, init_per_thread_i64<DATA_STRUCTURE_ADAPTER>, &(input_wrappers[i]));
+		if (result != 0) {
+			printf("Thread creation error\n");
+			return false;
+		}
+    }
+    for (int i = 0; i < tnum; i++) {
+		result = pthread_join(threads[i], NULL);
+		if (result != 0) {
+			printf("Thread join error\n");
+			return false;
+		}
+	}
+    return true;
+}
+
+template<class DATA_STRUCTURE_ADAPTER>
+void* search_per_thread_i64(void *ptr) {
+
+    i64_wrapper<DATA_STRUCTURE_ADAPTER> *input_wrapper = (i64_wrapper<DATA_STRUCTURE_ADAPTER>*) ptr;
+
+    int tid = input_wrapper->tid;
+    auto tree = input_wrapper->tree;
+    int n = input_wrapper->n;
+    int64_t* ops = input_wrapper->ops;
+
+    int64_t key;
+
+    int papi_event = papi_exp_start_counter(tid);
+
+    tree->initThread(tid);
+
+    if(ops == NULL) {
+        int bbb;
+        for(int i = 0; i < n; i++) {
+            bbb = i * BATCH_NUM / n;
+            key = rand_dist(&(zipf_dist[bbb]), tid);
+            exp_start_timer(tid);
+            tree->find(tid, key);
+            exp_stop_timer(tid);
+        }
+    }
+    else {
+        for(int i = 0; i < n; i++) {
+            key = ops[i];
+            exp_start_timer(tid);
+            tree->find(tid, key);
+            exp_stop_timer(tid);
+        }
+    }
+
+    tree->deinitThread(tid);
+
+    papi_exp_stop_counter(tid, papi_event);
+
+    return NULL;
+}
+
+template<class DATA_STRUCTURE_ADAPTER>
+void* insert_per_thread_i64(void *ptr) {
+
+    i64_wrapper<DATA_STRUCTURE_ADAPTER> *input_wrapper = (i64_wrapper<DATA_STRUCTURE_ADAPTER>*) ptr;
+
+    int tid = input_wrapper->tid;
+    auto tree = input_wrapper->tree;
+    int n = input_wrapper->n;
+    int64_t* ops = input_wrapper->ops;
+
+    int64_t key;
+    void *value = NULL;
+
+    int papi_event = papi_exp_start_counter(tid);
+
+    tree->initThread(tid);
+
+    if(ops == NULL) {
+        int bbb;
+        for(int i = 0; i < n; i++) {
+            bbb = i * BATCH_NUM / n;
+            key = rand_dist(&(zipf_dist[bbb]), tid);
+            exp_start_timer(tid);
+            tree->insertIfAbsent(tid, key, value);
+            exp_stop_timer(tid);
+        }
+    }
+    else {
+        for(int i = 0; i < n; i++) {
+            key = ops[i];
+            exp_start_timer(tid);
+            tree->insertIfAbsent(tid, key, value);
+            exp_stop_timer(tid);
+        }
+    }
+
+    tree->deinitThread(tid);
+
+    papi_exp_stop_counter(tid, papi_event);
+
+    return NULL;
+}
+
+template<class DATA_STRUCTURE_ADAPTER>
+bool run_test_threads_i64(const int tnum, DATA_STRUCTURE_ADAPTER *tree, i64_array test_ops, operation_t op_type) {
+
+    int init_n = test_ops.n;
+    int64_t* ops =  test_ops.i64_map;
+    int n_per_thread = init_n / tnum;
+
+    pthread_t threads[tnum];
+    i64_wrapper<DATA_STRUCTURE_ADAPTER> input_wrappers[tnum];
+    
+    int result;
+
+    if(ops == NULL) {
+        for(int i = 0; i < BATCH_NUM; i++)
+            rand_pim_init(&(zipf_dist[i]), PIM_NR, skewness, INT64_MAX);
+    }
+
+    for(int i=0; i<tnum; i++) {
+        input_wrappers[i].tid = i;
+        input_wrappers[i].tree = tree;
+        if(ops == NULL) {
+            input_wrappers[i].ops = NULL;
+            seed_and_print(i);
+        }
+        else
+            input_wrappers[i].ops = &(ops[n_per_thread * i]);
+        input_wrappers[i].n = n_per_thread;
+        
+        if(op_type == operation_t::predecessor_t)
+            result = pthread_create(&(threads[i]), NULL, search_per_thread_i64<DATA_STRUCTURE_ADAPTER>, &(input_wrappers[i]));
+        else if(op_type == operation_t::insert_t)
+            result = pthread_create(&(threads[i]), NULL, insert_per_thread_i64<DATA_STRUCTURE_ADAPTER>, &(input_wrappers[i]));
+        else return false;
+
+		if (result != 0) {
+			printf("Thread creation error\n");
+			return false;
+		}
+    }
+    for (int i = 0; i < tnum; i++) {
+		result = pthread_join(threads[i], NULL);
+		if (result != 0) {
+			printf("Thread join error\n");
+			return false;
+		}
+	}
+    papi_exp_print_counters(init_n, tnum);
+    return true;
+}
+
+double rw_ratio;
+
+template<class DATA_STRUCTURE_ADAPTER>
+struct ycsb_wrapper {
+    int tid;
+    DATA_STRUCTURE_ADAPTER *tree;
+    int n;
+};
+
+template<class DATA_STRUCTURE_ADAPTER>
+void* ycsb_per_thread_i64(void *ptr) {
+
+    ycsb_wrapper<DATA_STRUCTURE_ADAPTER> *input_wrapper = (ycsb_wrapper<DATA_STRUCTURE_ADAPTER>*) ptr;
+
+    int tid = input_wrapper->tid;
+    auto tree = input_wrapper->tree;
+    int n = input_wrapper->n;
+
+    int64_t key;
+    void *value = NULL;
+    float rw_flag;
+
+    int papi_event = papi_exp_start_counter(tid);
+
+    tree->initThread(tid);
+
+    int bbb;
+    for(int i = 0; i < n; i++) {
+        bbb = i * BATCH_NUM / n;
+        key = rand_dist(&(zipf_dist[bbb]), tid);
+        rw_flag = rand_float(tid);
+        exp_start_timer(tid);
+        if(rw_flag < rw_ratio)
+            tree->find(tid, key);
+        else
+            tree->insertIfAbsent(tid, key, value);
+        exp_stop_timer(tid);
+    }
+
+    tree->deinitThread(tid);
+
+    papi_exp_stop_counter(tid, papi_event);
+
+    return NULL;
+}
+
+template<class DATA_STRUCTURE_ADAPTER>
+bool run_ycsb_threads_i64(const int tnum, DATA_STRUCTURE_ADAPTER *tree, int init_n) {
+
+    int n_per_thread = init_n / tnum;
+
+    pthread_t threads[tnum];
+    ycsb_wrapper<DATA_STRUCTURE_ADAPTER> input_wrappers[tnum];
+
+    int result;
+
+    for(int i = 0; i < BATCH_NUM; i++)
+        rand_pim_init(&(zipf_dist[i]), PIM_NR, skewness, INT64_MAX);
+
+    for(int i=0; i<tnum; i++) {
+        input_wrappers[i].tid = i;
+        input_wrappers[i].tree = tree;
+        seed_and_print(i);
+        input_wrappers[i].n = n_per_thread;
+
+        result = pthread_create(&(threads[i]), NULL, ycsb_per_thread_i64<DATA_STRUCTURE_ADAPTER>, &(input_wrappers[i]));
+
+		if (result != 0) {
+			printf("Thread creation error\n");
+			return false;
+		}
+    }
+    for (int i = 0; i < tnum; i++) {
+		result = pthread_join(threads[i], NULL);
+		if (result != 0) {
+			printf("Thread join error\n");
+			return false;
+		}
+	}
+    papi_exp_print_counters(init_n, tnum);
+    return true;
+}
+
+
+
+
+
+
+
+
 int main(int argc, char** argv) {
 
     const int64_t KEY_ANY = 0;
@@ -271,86 +585,68 @@ int main(int argc, char** argv) {
     // ops_array init_ops = {.n = 400, .operation_map = NULL};
     // ops_array search_ops = {.n = 400, .operation_map = NULL};
     // ops_array insert_ops = {.n = 40, .operation_map = NULL};
-    ops_array init_ops, search_ops, insert_ops;
+    // ops_array init_ops, search_ops, insert_ops;
+    i64_array init_ops, search_ops, insert_ops;
+    int dataset_size, init_size, test_size;
     
     if(argc == 1) {
-        init_ops = read_op_file(string("/usr0/home/yiweiz3/wiki_data/wiki_500M_init_1.binary"));
-        run_init_threads(threadNum, tree, init_ops);
-        if ( munmap( (void*)(init_ops.operation_map), init_ops.n * sizeof(operation) ) == -1) {
-            printf("munmap failed with error\n");
-        }
-        init_ops = read_op_file(string("/usr0/home/yiweiz3/wiki_data/wiki_500M_init_2.binary"));
-        run_init_threads(threadNum, tree, init_ops);
-        if ( munmap( (void*)(init_ops.operation_map), init_ops.n * sizeof(operation) ) == -1) {
-            printf("munmap failed with error\n");
-        }
-        init_ops = read_op_file(string("/usr0/home/yiweiz3/wiki_data/wiki_500M_init_3.binary"));
-        run_init_threads(threadNum, tree, init_ops);
-        if ( munmap( (void*)(init_ops.operation_map), init_ops.n * sizeof(operation) ) == -1) {
-            printf("munmap failed with error\n");
-        }
-        init_ops = read_op_file(string("/usr0/home/yiweiz3/wiki_data/wiki_500M_init_4.binary"));
-        run_init_threads(threadNum, tree, init_ops);
-        if ( munmap( (void*)(init_ops.operation_map), init_ops.n * sizeof(operation) ) == -1) {
-            printf("munmap failed with error\n");
-        }
-        init_ops = read_op_file(string("/usr0/home/yiweiz3/wiki_data/wiki_500M_init_5.binary"));
-        run_init_threads(threadNum, tree, init_ops);
-        if ( munmap( (void*)(init_ops.operation_map), init_ops.n * sizeof(operation) ) == -1) {
-            printf("munmap failed with error\n");
-        }
+        init_ops = read_i64_file(string("/usr0/home/yiweiz3/wiki_data/wiki_1200M_keys.i64binary"));
+        cout<<"Read file finished"<<endl;
+        cout<<init_ops.n<<" "<<init_ops.i64_map<<endl;
+        dataset_size = init_ops.n;
+        init_size = dataset_size  * 5 / 6;
+        test_size = dataset_size / 6;
+        init_ops.n = init_size;
+        search_ops.n = test_size;
+        insert_ops.n = test_size;
+        search_ops.i64_map = &(init_ops.i64_map[init_size]);
+        insert_ops.i64_map = search_ops.i64_map;
+        run_init_threads_i64(threadNum, tree, init_ops);
     }
     else if(argc == 3) {
-        init_ops.operation_map = NULL;
+        init_ops.i64_map = NULL;
         init_ops.n = atoi(argv[1]);
         skewness = atof(argv[2]);
-        run_init_threads(threadNum, tree, init_ops);
+        run_init_threads_i64(threadNum, tree, init_ops);
+        cout<<"Init finished"<<endl;
     }
-    else if(argc == 2 && atoi(argv[1]) == 10086) {
-        init_ops = read_op_file(string("/usr0/home/yiweiz3/wiki_data/wiki_500M_init.binary"));
-        int file_size = init_ops.n / 5;
-        write_ops_to_file(string("/usr0/home/yiweiz3/wiki_data/wiki_500M_init_1.binary"), init_ops.operation_map, file_size);
-        write_ops_to_file(string("/usr0/home/yiweiz3/wiki_data/wiki_500M_init_2.binary"), &(init_ops.operation_map[file_size]), file_size);
-        write_ops_to_file(string("/usr0/home/yiweiz3/wiki_data/wiki_500M_init_3.binary"), &(init_ops.operation_map[file_size * 2]), file_size);
-        write_ops_to_file(string("/usr0/home/yiweiz3/wiki_data/wiki_500M_init_4.binary"), &(init_ops.operation_map[file_size * 3]), file_size);
-        write_ops_to_file(string("/usr0/home/yiweiz3/wiki_data/wiki_500M_init_5.binary"), &(init_ops.operation_map[file_size * 4]), file_size);
+    else if(argc == 4) {
+        init_ops.i64_map = NULL;
+        init_ops.n = atoi(argv[1]);
+        skewness = atof(argv[2]);
+        rw_ratio = atof(argv[3]);
+        run_init_threads_i64(threadNum, tree, init_ops);
+        cout<<"Init finished"<<endl;
+        test_size = atoi(argv[1]) / 5;
+        papi_exp_init_lib();
+        run_ycsb_threads_i64(threadNum, tree, test_size);
+        delete tree;
         return 0;
     }
     else return 1;
 
     papi_exp_init_lib();
 
-    if(argc == 1) 
-        search_ops = read_op_file(string("/usr0/home/yiweiz3/wiki_data/wiki_100M_predecessor.binary"));
-    else {
-        search_ops.operation_map = NULL;
+    if(argc != 1) {
+        search_ops.i64_map = NULL;
         search_ops.n = atoi(argv[1]) / 5;
     }
-    cout<<"Read init file finished"<<endl;
-    cout<<search_ops.n<<" "<<search_ops.operation_map<<endl;
+    cout<<search_ops.n<<" "<<search_ops.i64_map<<endl;
 
-    run_test_threads(threadNum, tree, search_ops, operation_t::predecessor_t);
+    run_test_threads_i64(threadNum, tree, search_ops, operation_t::predecessor_t);
     cout<<"Search test finished."<<endl;
 
-    if(argc == 1) 
-    if ( munmap( (void*)(search_ops.operation_map), search_ops.n * sizeof(operation) ) == -1) {
-        printf("munmap failed with error\n");
-    }
-
-    if(argc == 1)
-        insert_ops = read_op_file(string("/usr0/home/yiweiz3/wiki_data/wiki_100M_insert.binary"));
-    else {
-        insert_ops.operation_map = NULL;
+    if(argc != 1) {
+        insert_ops.i64_map = NULL;
         insert_ops.n = atoi(argv[1]) / 5;
     }
-    cout<<"Read init file finished"<<endl;
-    cout<<insert_ops.n<<" "<<insert_ops.operation_map<<endl;
+    cout<<insert_ops.n<<" "<<insert_ops.i64_map<<endl;
 
-    run_test_threads(threadNum, tree, insert_ops, operation_t::insert_t);
+    run_test_threads_i64(threadNum, tree, insert_ops, operation_t::insert_t);
     cout<<"Insert test finished."<<endl;
 
     if(argc == 1)
-    if ( munmap( (void*)(insert_ops.operation_map), insert_ops.n * sizeof(operation) ) == -1) {
+    if ( munmap( (void*)(init_ops.i64_map), dataset_size * sizeof(int64_t) ) == -1) {
         printf("munmap failed with error\n");
     }
 

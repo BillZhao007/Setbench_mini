@@ -107,3 +107,51 @@ ops_array read_op_file(string name) {
 
     return operation_map;
 }
+
+struct i64_array {
+    int n;
+    int64_t* i64_map;
+};
+
+i64_array read_i64_file(string name) {
+    const char* filepath = name.c_str();
+
+    int fd = open(filepath, O_RDONLY, (mode_t)0600);
+
+    if (fd == -1) {
+        perror("Error opening file for writing");
+        exit(EXIT_FAILURE);
+    }
+
+    struct stat fileInfo;
+
+    if (fstat(fd, &fileInfo) == -1) {
+        perror("Error getting the file size");
+        exit(EXIT_FAILURE);
+    }
+
+    if (fileInfo.st_size == 0) {
+        fprintf(stderr, "Error: File is empty, nothing to do\n");
+        exit(EXIT_FAILURE);
+    }
+
+    printf("File size is %ji\n", (intmax_t)fileInfo.st_size);
+
+    void* map = mmap(0, fileInfo.st_size, PROT_READ, MAP_SHARED, fd, 0);
+
+    if (map == MAP_FAILED) {
+        close(fd);
+        perror("Error mmapping the file");
+        exit(EXIT_FAILURE);
+    }
+
+    cout << fileInfo.st_size << ' ' << sizeof(int64_t) << endl;
+
+    assert(fileInfo.st_size % sizeof(int64_t) == 0);
+
+    i64_array operation_map;
+    operation_map.n = fileInfo.st_size / sizeof(int64_t);
+    operation_map.i64_map = (int64_t*)map;
+
+    return operation_map;
+}
