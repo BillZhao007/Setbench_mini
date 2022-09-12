@@ -30,7 +30,7 @@ const int threadNum = 20;
 bool errors[threadNum] = {false};
 
 double skewness;
-#define PIM_NR 2560
+#define PIM_NR 2048
 
 #define BATCH_NUM 100
 rand_distribution uni_dist;

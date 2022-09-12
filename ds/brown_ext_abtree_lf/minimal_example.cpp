@@ -31,7 +31,7 @@ bool errors[threadNum] = {false};
 
 double skewness;
 double rw_ratio;
-#define PIM_NR 2560
+#define PIM_NR 2048
 
 #define BATCH_NUM 100
 rand_distribution uni_dist;
